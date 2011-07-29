@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
 
-require File.expand_path('../../lib/cli', __FILE__)
+require File.expand_path('../../lib/iterm/cli', __FILE__)
 
 Skylab::Iterm::Cli.new.run ARGV
