@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+## NOTE for `iterm` users -- this file is not used: it is here for reference.
+## (it lives in a different git repository)
+
 # adapted from http://kpumuk.info/mac-os-x/how-to-show-ssh-host-name-on-the-iterms-background/
 
 HEIGHT_TALL=750
