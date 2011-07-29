@@ -26,16 +26,33 @@ class Skylab::Iterm::Cli < Tmx::Face::Cli
     end
   end
 
-  o(:'bg') do |o|
+  o(:'bg') do |o, req|
     syntax "#{path} [<text> [<text> [...]]]"
-    o.banner = "create and set a background image for the teriminal\n#{usage_string}"
+    o.banner = "Create and set a background image for the teriminal\n#{usage_string}"
+    o.on('-e', '--exec -- [...]', 'execute the line after displaying it') { }
+    o.on('-v', '--verbose', 'Be verbose') { req[:verbose] = true }
   end
 
+  def before_parse_bg req, args
+    idx = args.index { |s| %w(-e --exec).include?(s) } or return true
+    req[:_exec_this] = args[(idx+1)..-1]
+    args.replace idx == 0 ? [] : args[0..(idx-1)]
+    true
+  end
+  protected :before_parse_bg
+
   def bg req, *args
-    args.empty? and return _bg_get
-    argv = _bg args
+    if args.empty?
+      if req[:_exec_this]
+        args = req[:_exec_this]
+      else
+        return _bg_get
+      end
+    end
+    argv = argv_for_image_magick req, args
     cmd = argv.join(' ')
     pid = nil
+    req[:verbose] and @err.puts cmd
     Open3.popen3(cmd) do |sin, sout, serr|
       err = serr.read
       out = sout.read
@@ -46,6 +63,11 @@ class Skylab::Iterm::Cli < Tmx::Face::Cli
     path = "#{ImgDirname}/#{ImgBasename}.#{pid}.png"
     @err.puts "(setting background image to: #{path})"
     _current_session.background_image_path.set path
+    if req[:_exec_this]
+      @err.puts "(#{req[:_exec_this].join(' ')})"
+      exec(req[:_exec_this].join(' '))
+    end
+    true
   end
 
   ImgDirname  = '/tmp'
@@ -58,7 +80,12 @@ private
       obj.extend self
     end
     def to_hex
-      '#' + self.map{ |x| x.to_s(16)[0,2] }.join('')
+      '#' + self.map{ |x| int_to_hex(x) }.join('')
+    end
+    TargetPlaces = 2  # each component of an #rrggbb hexadecimal color has 2 places
+    Divisor = 16 ** TargetPlaces
+    def int_to_hex int
+      (int.to_f / Divisor).round.to_s(16).rjust(TargetPlaces, '0')
     end
   end
   def _app
@@ -68,13 +95,15 @@ private
     end
   end
 
-  def _bg lines
+  def argv_for_image_magick req, lines
     lines.reject! { |l| l.index("'") }
     offset1 = "20,10"
     offset2 = "20,80"
     argv = ['convert']
     argv.push "-size 500x300"
-    bg_hex = __bg_color_get.to_hex
+    clr = __bg_color_get
+    req[:verbose] and @err.puts "bg_color: #{clr.inspect}"
+    bg_hex = clr.to_hex
     argv.push "xc:#{bg_hex}"
     argv.push "-gravity NorthEast"
     argv.push "-fill \"#{'#662020'}\""
@@ -84,8 +113,9 @@ private
     argv.push "-pointsize 60"
     argv.push "-antialias"
     argv.push "-draw \"text #{offset1} '#{lines[0]}'\""
-    if lines[1]
-      argv.push "-pointsize 30 -draw \"text #{offset2} '#{lines[1]}'\""
+    if lines.length > 1
+      second_line = lines[1..-1].join(' ')
+      argv.push "-pointsize 30 -draw \"text #{offset2} '#{second_line}'\""
     end
     argv.push "#{ImgDirname}/#{ImgBasename}.$$.png; echo $$"
     argv
