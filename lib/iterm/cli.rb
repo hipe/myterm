@@ -1,4 +1,4 @@
-require "#{File.expand_path('../../vendor/face/cli', __FILE__)}"
+require "#{File.expand_path('../vendor/face/cli', __FILE__)}"
 require 'ruby-debug'
 require 'open3'
 
