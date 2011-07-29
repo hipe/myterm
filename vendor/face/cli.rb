@@ -82,6 +82,8 @@ module Tmx::Face
       req = { }
       req.send(:instance_variable_set, '@method_parameters', argv)
       class << req; attr_accessor :method_parameters end
+      @parent_protected_instance_methods.include?("before_parse_#{@intern}".intern) and
+        ! @parent.send("before_parse_#{@intern}", req, argv) and return false
       begin
         build_option_parser(req).parse! argv
         req
@@ -124,6 +126,7 @@ module Tmx::Face
       alias_method :path, :invocation_string
       def parent= parent
         @parent and fail("won't overwrite existing parent")
+        @parent_protected_instance_methods = parent.class.protected_instance_methods(false).map(&:intern)
         @parent = parent
       end
       def usage msg=nil
