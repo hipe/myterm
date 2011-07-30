@@ -3,8 +3,8 @@ require 'ruby-debug'
 require 'open3'
 
 module Skylab; end
-module Skylab::Iterm; end
-class Skylab::Iterm::Cli < Tmx::Face::Cli
+module Skylab::Myterm; end
+class Skylab::Myterm::Cli < Tmx::Face::Cli
 
   o(:bounds) do |o|
     syntax "#{path} [x y width height]"
