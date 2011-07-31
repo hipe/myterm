@@ -6,6 +6,11 @@ module Skylab; end
 module Skylab::Myterm; end
 class Skylab::Myterm::Cli < Tmx::Face::Cli
 
+  version do
+    require "#{File.dirname(__FILE__)}/version"
+    Skylab::Myterm::VERSION
+  end
+
   o(:bounds) do |o|
     syntax "#{path} [x y width height]"
     o.banner = "gets/sets the bounds of the terminal window\n#{usage_string}"
