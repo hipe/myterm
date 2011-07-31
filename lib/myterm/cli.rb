@@ -29,8 +29,10 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
   o(:'bg') do |o, req|
     syntax "#{path} [<text> [<text> [...]]]"
     o.banner = "Create and set a background image for the teriminal\n#{usage_string}"
-    o.on('-e', '--exec -- [...]', 'execute the line after displaying it') { }
-    o.on('-v', '--verbose', 'Be verbose') { req[:verbose] = true }
+    o.on('-e', '--exec <cmd ...>', 'Display <cmd ...> in the background then execute it in the shell.') { }
+    o.on('-o', '--opacity PERCENT', "Percent by which to make image background opaque",
+      "(0%: tranparent. 100%: solid.  Default: solid)") { |amt| req[:alpha_percent] = amt }
+    o.on('-v', '--verbose', 'Be verbose.') { req[:verbose] = true }
   end
 
   def before_parse_bg req, args
@@ -49,6 +51,7 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
         return _bg_get
       end
     end
+    normalize_bg_options(req) or return
     argv = argv_for_image_magick req, args
     cmd = argv.join(' ')
     pid = nil
@@ -61,7 +64,7 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
       pid = out.to_i
     end
     path = "#{ImgDirname}/#{ImgBasename}.#{pid}.png"
-    @err.puts "(setting background image to: #{path})"
+    @err.puts "(setting background image to: #{path})" # doesn't care if --verbose
     _current_session.background_image_path.set path
     if req[:_exec_this]
       @err.puts "(#{req[:_exec_this].join(' ')})"
@@ -103,7 +106,11 @@ private
     argv.push "-size 500x300"
     clr = __bg_color_get
     req[:verbose] and @err.puts "bg_color: #{clr.inspect}"
-    bg_hex = clr.to_hex
+    bg_hex = if req.key?(:alpha_percent)
+      "#{clr.to_hex}#{req[:alpha_percent].to_hex}"
+    else
+      clr.to_hex
+    end
     argv.push "xc:#{bg_hex}"
     argv.push "-gravity NorthEast"
     argv.push "-fill \"#{'#662020'}\""
@@ -146,5 +153,35 @@ private
 
   def _my_tty
     @my_tty ||= `tty`.strip
+  end
+
+  module ChannelScalarNormalized
+    def self.[] obj
+      obj.extend self
+    end
+    def to_hex
+      (('ff'.to_i(16).to_f * self).to_i).to_s(16).rjust(2, '0')
+    end
+  end
+
+  def normalize_alpha_percent req
+    if val = req[:alpha_percent]
+      if md = /\A(\d+(?:\.\d+)?)%?\z/.match(val)
+        val = md[1].to_f
+        if (0.0..100.0).include?(val)
+          req[:alpha_percent] = ChannelScalarNormalized[val / 100.0]
+        else
+          return @err.puts("Percent value (#{val}%) must be between 0 and 100 inclusive.")
+        end
+      else
+        return @err.puts("invalid format for percent #{val.inspect} -- expecting e.g. \"58%\"")
+      end
+    end
+    true
+  end
+
+  def normalize_bg_options req
+    req.key?(:alpha_percent) and (normalize_alpha_percent(req) or return false)
+    true
   end
 end
