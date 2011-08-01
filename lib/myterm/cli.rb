@@ -5,10 +5,11 @@ require 'open3'
 module Skylab; end
 module Skylab::Myterm; end
 class Skylab::Myterm::Cli < Tmx::Face::Cli
+  Myterm = ::Skylab::Myterm # don't use fully qualified name internally
 
   version do
     require "#{File.dirname(__FILE__)}/version"
-    Skylab::Myterm::VERSION
+    Myterm::VERSION
   end
 
   o(:bounds) do |o|
@@ -16,16 +17,12 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
     o.banner = "gets/sets the bounds of the terminal window\n#{usage_string}"
   end
 
-  MinLen = 50
-
   def bounds o, *a
     case a.length
     when 4
-      x = a.detect { |i| i !~ /^\d+$/ } and return usage("expecting digit had #{x.inspect}")
-      x = a[2,2].detect { |i| i.to_i < MinLen } and return usage("too small: #{x} (min: #{MinLen})")
-      @err.puts _app.windows[0].bounds.set a
+      begin ; iterm.bounds = a ; rescue Myterm::ValidationError => e ; return usage e ; end
     when 0
-      @err.puts _app.windows[0].bounds.get.inspect
+      @err.puts iterm.bounds.inspect
     else
       return usage("bad number of args #{a.length}: expecting 0 or 4")
     end
@@ -83,6 +80,10 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
   ChannelFull = 65535
 
 private
+  def iterm
+    @iterm ||= Myterm::ItermProxy.new
+  end
+
   module Color
     def self.[] obj
       obj.extend self
@@ -94,12 +95,6 @@ private
     Divisor = 16 ** TargetPlaces
     def int_to_hex int
       (int.to_f / Divisor).round.to_s(16).rjust(TargetPlaces, '0')
-    end
-  end
-  def _app
-    @app ||= begin
-      require 'appscript'
-      Appscript.app('iTerm')
     end
   end
 
@@ -188,5 +183,38 @@ private
   def normalize_bg_options req
     req.key?(:alpha_percent) and (normalize_alpha_percent(req) or return false)
     true
+  end
+end
+
+class Skylab::Myterm::ValidationError < RuntimeError ; end
+
+class Skylab::Myterm::ItermProxy
+  # ItermProxy is a wrapper around everything Iterm to the extent that its AppleScript interface supports
+
+  Myterm = ::Skylab::Myterm # keep top level name out of the bulk of the code
+
+  MinLen = 50
+
+  def bounds= arr
+    x = arr.detect { |i| i.to_s !~ /^\d+$/ } and return invalid("expecting digit had #{x.inspect}")
+    x = arr[2,2].detect { |i| i.to_i < MinLen } and return invalid("too small: #{x} (min: #{MinLen})")
+    app.windows[0].bounds.set arr
+  end
+
+  def bounds
+    app.windows[0].bounds.get
+  end
+
+private
+
+  def app
+    @app ||= begin
+      require 'appscript'
+      Appscript.app('iTerm')
+    end
+  end
+
+  def invalid msg
+    raise Myterm::ValidationError.new(msg)
   end
 end
