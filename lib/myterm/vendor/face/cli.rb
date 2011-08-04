@@ -81,7 +81,9 @@ module Tmx::Face
     def parse argv
       req = { }
       req.send(:instance_variable_set, '@method_parameters', argv)
-      class << req; attr_accessor :method_parameters end
+      class << req
+        attr_accessor :method_parameters, :command
+      end
       @parent_protected_instance_methods.include?("before_parse_#{@intern}".intern) and
         ! @parent.send("before_parse_#{@intern}", req, argv) and return false
       begin
@@ -360,6 +362,7 @@ class Tmx::Face::Cli
     end while (cmd and cmd.respond_to?(:find_command) and runner = cmd)
     cmd and req = cmd.parse(argv) and
     begin
+      req.command = cmd
       runner.send(cmd.method_symbol, req, * req.method_parameters)
     rescue ArgumentError => e
       argument_error e, cmd
