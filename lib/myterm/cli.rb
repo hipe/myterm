@@ -1,11 +1,26 @@
 require "#{File.expand_path('../vendor/face/cli', __FILE__)}"
+require "#{File.dirname(__FILE__)}/api"
 require 'ruby-debug'
 require 'open3'
 
 module Skylab; end
 module Skylab::Myterm; end
+
+module Skylab::Myterm::PathPrettifier
+  HomeDirRe = /\A#{Regexp.escape(ENV['HOME'])}/
+protected
+  def pretty_path path
+    path.sub(HomeDirRe, '~')
+  end
+end
+
+class Tmx::Face::Command
+  include Skylab::Myterm::PathPrettifier
+end
+
 class Skylab::Myterm::Cli < Tmx::Face::Cli
   Myterm = ::Skylab::Myterm # don't use fully qualified name internally
+  include Myterm::PathPrettifier
 
   version do
     require "#{File.dirname(__FILE__)}/version"
@@ -29,11 +44,20 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
   end
 
   o(:'bg') do |o, req|
-    syntax "#{path} [<text> [<text> [...]]]"
-    o.banner = "Create and set a background image for the teriminal\n#{usage_string}"
-    o.on('-e', '--exec <cmd ...>', 'Display <cmd ...> in the background then execute it in the shell.') { }
+    syntax "#{path} [opts] [<text> [<text> [...]]]"
+    o.banner = "Generate a background image with certain text for the terminal\n#{usage_string}"
+    o.on('-e', '--exec <cmd ...>', 'Execute <cmd ...> in shell, also use it as text for background.') { }
     o.on('-o', '--opacity PERCENT', "Percent by which to make image background opaque",
       "(0%: tranparent. 100%: solid.  Default: solid)") { |amt| req[:alpha_percent] = amt }
+    req[:font_file] = DefaultFontFile
+    o.on('--font FONTFILE.ttf', "font to use (default: #{pretty_path(req[:font_file])})") do |path|
+      req[:font_file] = path
+    end
+    req[:fill] = '#662020'
+    o.on('--fill[=COLOR]', "Write text in this color (default: #{req[:fill].inspect})",
+      "(when present but with no value, will use \"Text/Normal\" setting of current iTerm tab)" ) do |v|
+      req[:fill] = v || lambda { |img| img.iterm.session.foreground_color.to_hex }
+    end
     o.on('-v', '--verbose', 'Be verbose.') { req[:verbose] = true }
   end
 
@@ -48,173 +72,78 @@ class Skylab::Myterm::Cli < Tmx::Face::Cli
   def bg req, *args
     if args.empty?
       if req[:_exec_this]
+        args.any? and fail("logic error -- see before_parse_bg.")
         args = req[:_exec_this]
       else
-        return _bg_get
+        return get_background
       end
     end
-    normalize_bg_options(req) or return
-    argv = argv_for_image_magick req, args
-    cmd = argv.join(' ')
-    pid = nil
-    req[:verbose] and @err.puts cmd
-    Open3.popen3(cmd) do |sin, sout, serr|
-      err = serr.read
-      out = sout.read
-      /\A\d+[[:space:]]*\z/ =~ out or fail("unexpected stdout from convert: #{out.inspect}")
-      "" == err or return @err.puts "unexpected error from `convert`:\n#{err}"
-      pid = out.to_i
-    end
-    path = "#{ImgDirname}/#{ImgBasename}.#{pid}.png"
-    @err.puts "(setting background image to: #{path})" # doesn't care if --verbose
-    _current_session.background_image_path.set path
+    check_font(req) or return
+    img = Myterm::ImageBuilder.build_background_image(iterm, args, req) or return false
+    req[:verbose] and @err.puts "(bg_color: #{img.background_color.inspect})"
+    outpath = "#{ImgDirname}/#{ImgBasename}.#{Process.pid}.png"
+    img.write(outpath)
+    req[:verbose] and @err.puts "(setting background image to: #{outpath})" # doesn't care if --verbose
+    iterm.session.background_image_path = outpath
     if req[:_exec_this]
-      @err.puts "(#{req[:_exec_this].join(' ')})"
+      @err.puts "(#{program_name} executing: #{req[:_exec_this].join(' ')})"
       exec(req[:_exec_this].join(' '))
     end
     true
   end
 
+  DefaultFontFile = "#{ENV['HOME']}/.fonts/MytermDefaultFont.ttf"
   ImgDirname  = '/tmp'
   ImgBasename = 'iTermBG'
-  ChannelFull = 65535
 
 private
+  def check_font req
+    File.exist?(req[:font_file]) and return true
+    if req[:font_file] == DefaultFontFile
+      return maybe_download_font req
+    else
+      font_not_found req
+    end
+  end
+
+  DefaultFontUrl              = 'http://img.dafont.com/dl/?f=simple_life'
+  DefaultFontFileNotSimlinked = "#{ENV['HOME']}/.fonts/SimpleLife.ttf"
+
+  def maybe_download_font req
+    target = DefaultFontFileNotSimlinked
+    File.exist?(target) and return true
+    $stdin.tty? && $stdout.tty? or return font_not_found(req)
+    @err.write "Font file #{pretty_path(req[:font_file])} not found.  "
+    require 'highline'
+    require 'fileutils'
+    HighLine.new.agree("Let #{program_name} download it? (Y/n) (recommended: yes)") or return false
+    outfile = DefaultFontFileNotSimlinked.sub(/\.ttf$/, '.zip')
+    font_dir = File.dirname(outfile)
+    File.directory?(font_dir) or FileUtils.mkdir_p(font_dir, :verbose => true)
+    cmds = ["wget -O #{outfile} #{DefaultFontUrl}"]
+    cmds.push "cd #{font_dir}"
+    cmds.push "unzip #{outfile}"
+    cmds.push "ln -s #{DefaultFontFileNotSimlinked} #{DefaultFontFile}"
+    cmds.push("echo 'finished installing for #{program_name}: #{pretty_path(DefaultFontFileNotSimlinked)}. " <<
+      "Please try using it again.'")
+    @err.puts(cmd = cmds.join(' ; '))
+    exec(cmd)
+  end
+
+  def font_not_found req
+    @err.puts "font file not found: #{pretty_path(req[:font_file])}"
+    req.command.usage
+    return false
+  end
+
   def iterm
     @iterm ||= Myterm::ItermProxy.new
   end
 
-  module Color
-    def self.[] obj
-      obj.extend self
-    end
-    def to_hex
-      '#' + self.map{ |x| int_to_hex(x) }.join('')
-    end
-    TargetPlaces = 2  # each component of an #rrggbb hexadecimal color has 2 places
-    Divisor = 16 ** TargetPlaces
-    def int_to_hex int
-      (int.to_f / Divisor).round.to_s(16).rjust(TargetPlaces, '0')
-    end
+  def get_background
+    @err.puts "tty: #{iterm.session.tty}"
+    @err.puts "background_image: #{iterm.session.background_image_path.inspect}"
+    @err.puts "background_color: #{iterm.session.background_color}"
   end
 
-  def argv_for_image_magick req, lines
-    lines.reject! { |l| l.index("'") }
-    offset1 = "20,10"
-    offset2 = "20,80"
-    argv = ['convert']
-    argv.push "-size 500x300"
-    clr = __bg_color_get
-    req[:verbose] and @err.puts "bg_color: #{clr.inspect}"
-    bg_hex = if req.key?(:alpha_percent)
-      "#{clr.to_hex}#{req[:alpha_percent].to_hex}"
-    else
-      clr.to_hex
-    end
-    argv.push "xc:#{bg_hex}"
-    argv.push "-gravity NorthEast"
-    argv.push "-fill \"#{'#662020'}\""
-    # argv.push "-fill #{'#'}" # just to get any error
-    argv.push "-font #{ENV['HOME']}/.fonts/SimpleLife.ttf"
-    argv.push "-style Normal"
-    argv.push "-pointsize 60"
-    argv.push "-antialias"
-    argv.push "-draw \"text #{offset1} '#{lines[0]}'\""
-    if lines.length > 1
-      second_line = lines[1..-1].join(' ')
-      argv.push "-pointsize 30 -draw \"text #{offset2} '#{second_line}'\""
-    end
-    argv.push "#{ImgDirname}/#{ImgBasename}.$$.png; echo $$"
-    argv
-  end
-
-  def _bg_get
-    session = _current_session
-    @err.puts "tty: #{_my_tty}"
-    @err.puts "background_image: #{session.background_image_path.get.inspect}"
-    @err.puts "background_color: #{session.background_color.get}"
-  end
-
-  def __bg_color_get
-    Color[_current_session.background_color.get]
-  end
-
-  def _current_session
-    @current_session ||= _app.terminals.get.each do |term|
-      sessions = term.sessions.get
-      sessions.each do |session|
-        if session.tty.get == _my_tty
-          return session
-        end
-      end
-    end
-    nil
-  end
-
-  def _my_tty
-    @my_tty ||= `tty`.strip
-  end
-
-  module ChannelScalarNormalized
-    def self.[] obj
-      obj.extend self
-    end
-    def to_hex
-      (('ff'.to_i(16).to_f * self).to_i).to_s(16).rjust(2, '0')
-    end
-  end
-
-  def normalize_alpha_percent req
-    if val = req[:alpha_percent]
-      if md = /\A(\d+(?:\.\d+)?)%?\z/.match(val)
-        val = md[1].to_f
-        if (0.0..100.0).include?(val)
-          req[:alpha_percent] = ChannelScalarNormalized[val / 100.0]
-        else
-          return @err.puts("Percent value (#{val}%) must be between 0 and 100 inclusive.")
-        end
-      else
-        return @err.puts("invalid format for percent #{val.inspect} -- expecting e.g. \"58%\"")
-      end
-    end
-    true
-  end
-
-  def normalize_bg_options req
-    req.key?(:alpha_percent) and (normalize_alpha_percent(req) or return false)
-    true
-  end
-end
-
-class Skylab::Myterm::ValidationError < RuntimeError ; end
-
-class Skylab::Myterm::ItermProxy
-  # ItermProxy is a wrapper around everything Iterm to the extent that its AppleScript interface supports
-
-  Myterm = ::Skylab::Myterm # keep top level name out of the bulk of the code
-
-  MinLen = 50
-
-  def bounds= arr
-    x = arr.detect { |i| i.to_s !~ /^\d+$/ } and return invalid("expecting digit had #{x.inspect}")
-    x = arr[2,2].detect { |i| i.to_i < MinLen } and return invalid("too small: #{x} (min: #{MinLen})")
-    app.windows[0].bounds.set arr
-  end
-
-  def bounds
-    app.windows[0].bounds.get
-  end
-
-private
-
-  def app
-    @app ||= begin
-      require 'appscript'
-      Appscript.app('iTerm')
-    end
-  end
-
-  def invalid msg
-    raise Myterm::ValidationError.new(msg)
-  end
 end

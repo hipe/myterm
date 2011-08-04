@@ -15,6 +15,7 @@ Gem::Specification.new do |s|
   s.rubyforge_project = "myterm"
 
   s.add_dependency 'rb-appscript'
+  s.add_dependency 'highline'
   s.add_development_dependency "ruby-debug19"
 
   s.files         = `git ls-files`.split("\n")

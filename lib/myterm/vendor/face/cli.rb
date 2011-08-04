@@ -1,6 +1,6 @@
 require 'optparse'
 
-# an ultralight command-line parser (388 lines)
+# an ultralight command-line parser (391 lines)
 # that wraps around OptParse (can do anything it does)
 # with colors
 # with flexible command-like options ('officious' like -v, -h)
