@@ -7,10 +7,10 @@ require 'optparse'
 # with commands with arguments based off of method signatures
 # with subcommands, (namespaces) arbitrarily deeply nested
 
-module Tmx; end
-module Tmx::Face; end
+module Skylab; end
+module Skylab::Face; end
 
-module Tmx::Face::Colors
+module Skylab::Face::Colors
   def bold str ; style str, :bright, :green end
   def hi   str ; style str, :green          end
   def ohno str ; style str, :red            end
@@ -26,7 +26,7 @@ module Tmx::Face::Colors
   end
 end
 
-module Tmx::Face
+module Skylab::Face
   class Command
 
     include Colors
@@ -330,11 +330,11 @@ module Tmx::Face
   end
 end
 
-class Tmx::Face::Cli
-  extend Tmx::Face::Command::TreeDefiner
-  include Tmx::Face::Colors
-  include Tmx::Face::Command::Nodeish
-  include Tmx::Face::Command::Treeish
+class Skylab::Face::Cli
+  extend Skylab::Face::Command::TreeDefiner
+  include Skylab::Face::Colors
+  include Skylab::Face::Command::Nodeish
+  include Skylab::Face::Command::Treeish
 
   def initialize
     @out = $stdout

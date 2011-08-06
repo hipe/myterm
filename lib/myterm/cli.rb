@@ -14,11 +14,11 @@ protected
   end
 end
 
-class Tmx::Face::Command
+class Skylab::Face::Command
   include Skylab::Myterm::PathPrettifier
 end
 
-class Skylab::Myterm::Cli < Tmx::Face::Cli
+class Skylab::Myterm::Cli < Skylab::Face::Cli
   Myterm = ::Skylab::Myterm # don't use fully qualified name internally
   include Myterm::PathPrettifier
 
