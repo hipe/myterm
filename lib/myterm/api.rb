@@ -4,8 +4,12 @@ module Skylab::Myterm; end
 class Skylab::Myterm::ValidationError < RuntimeError ; end
 
 module Skylab::Myterm::Color
+  Myterm = Skylab::Myterm
   def self.[] obj
     obj.extend self
+  end
+  def self.dup color
+    self[color.dup]
   end
   def alpha= mixed
     if mixed.kind_of?(String)
@@ -15,7 +19,7 @@ module Skylab::Myterm::Color
     end
     (0.0..100.0).include?(mixed) or
       raise Myterm::ValidationError.new("Percent value (#{mixed}%) must be between 0 and 100 inclusive.")
-    self[3] = ChannelScalarNormalized[mixed / 100.0]
+    self[3] = Myterm::ChannelScalarNormalized[mixed / 100.0]
   end
   def to_hex
     '#' + self.map{ |x| int_to_hex(x) }.join('')
@@ -38,6 +42,7 @@ module Skylab::Myterm::ChannelScalarNormalized
 end
 
 class Skylab::Myterm::ImageBuilder
+  Myterm = Skylab::Myterm
   class << self
     def build_background_image iterm, lines, opts
       new(iterm, lines, opts).run
@@ -49,8 +54,8 @@ class Skylab::Myterm::ImageBuilder
   attr_reader :iterm
   def run
     require 'RMagick'
-    bg_color = @iterm.session.background_color
-    @opts.key?(:alpha_percent) and @opts.alpha = opts[:alpha_percent]
+    bg_color = Myterm::Color.dup(@iterm.session.background_color)
+    @opts.key?(:alpha_percent) and bg_color.alpha = @opts[:alpha_percent]
     img = Magick::Image.new(500, 300) do # copying over hard-coded dimensions from original Dmytro script
       self.background_color = bg_color.to_hex
     end
