@@ -1,6 +1,6 @@
 require 'optparse'
 
-# an ultralight command-line parser (391 lines)
+# an ultralight command-line parser (407 lines)
 # that wraps around OptParse (can do anything it does)
 # with colors
 # with flexible command-like options ('officious' like -v, -h)
@@ -11,6 +11,7 @@ module Skylab; end
 module Skylab::Face; end
 
 module Skylab::Face::Colors
+  extend self
   def bold str ; style str, :bright, :green end
   def hi   str ; style str, :green          end
   def ohno str ; style str, :red            end
@@ -80,12 +81,12 @@ module Skylab::Face
 
     def parse argv
       req = { }
-      req.send(:instance_variable_set, '@method_parameters', argv)
       class << req
-        attr_accessor :method_parameters, :command
+        attr_accessor :command
+        attr_accessor :method_parameters
       end
-      @parent_protected_instance_methods.include?("before_parse_#{@intern}".intern) and
-        ! @parent.send("before_parse_#{@intern}", req, argv) and return false
+      req.method_parameters = argv
+      req.command = self
       begin
         build_option_parser(req).parse! argv
         req
@@ -96,10 +97,11 @@ module Skylab::Face
       end
     end
 
+    NoUsageRe = /\A#{Regexp.escape(Skylab::Face::Colors.hi('usage:'))} /
+
     def summary
-      build_option_parser({}).to_s.
-        sub(/\A#{Regexp.escape(hi('usage:'))} /, '').
-        split("\n").select{ |s| ! s.strip.empty? }
+      build_option_parser({}).to_s =~ /\A[\n]*([^\n]*)(\n+[^\n])?/
+      [ "#{$1}#{ ' [..]' if $2 }".sub(NoUsageRe, '') ]
     end
 
     def syntax *args
@@ -125,10 +127,8 @@ module Skylab::Face
       def invocation_string
         "#{@parent.invocation_string} #{name}"
       end
-      alias_method :path, :invocation_string
       def parent= parent
         @parent and fail("won't overwrite existing parent")
-        @parent_protected_instance_methods = parent.class.protected_instance_methods(false).map(&:intern)
         @parent = parent
       end
       def usage msg=nil
@@ -159,7 +159,8 @@ module Skylab::Face
         #   option_definitions.reject! { |a,_| '-h' == a.first }
       end
       def namespace name, &block
-        command_definitions.push [Namespace, [name], block]
+        def_block = name.kind_of?(Array) ? name : [Namespace, [name], block]
+        command_definitions.push Namespace.add_definition(def_block)
       end
       def on *a, &b
         block_given? or raise ArgumentError.new("block required")
@@ -277,6 +278,19 @@ module Skylab::Face
     class Namespace
       extend TreeDefiner, Colors
       include Treeish, Nodeish, Colors
+      @definitions ||= []
+      class << self
+        def add_definition arr
+          @definitions.push arr
+          arr
+        end
+        def namespaces
+          @definitions.each_with_index do |defn, idx|
+            defn.kind_of?(Class) or @definitions[idx] = defn[0].build(*defn[1], &defn[2])
+          end
+          @definitions
+        end
+      end
       alias_method :interface, :class
       def init_for_run parent, name_as_used
         @name_as_used = name_as_used
@@ -290,6 +304,7 @@ module Skylab::Face
       end
       alias_method :inspect, :name
       def self.build name, &block
+        name.kind_of?(Symbol) or return name
         name = name.to_s
         Class.new(self).class_eval do
           self.namespace_name = name
@@ -331,10 +346,11 @@ module Skylab::Face
 end
 
 class Skylab::Face::Cli
-  extend Skylab::Face::Command::TreeDefiner
-  include Skylab::Face::Colors
-  include Skylab::Face::Command::Nodeish
-  include Skylab::Face::Command::Treeish
+  Face = Skylab::Face
+  extend Face::Command::TreeDefiner
+  include Face::Colors
+  include Face::Command::Nodeish
+  include Face::Command::Treeish
 
   def initialize
     @out = $stdout
@@ -362,7 +378,6 @@ class Skylab::Face::Cli
     end while (cmd and cmd.respond_to?(:find_command) and runner = cmd)
     cmd and req = cmd.parse(argv) and
     begin
-      req.command = cmd
       runner.send(cmd.method_symbol, req, * req.method_parameters)
     rescue ArgumentError => e
       argument_error e, cmd

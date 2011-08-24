@@ -1,5 +1,10 @@
-module Skylab; end
-module Skylab::Myterm; end
+module Skylab
+  module Myterm
+    def self.version
+      File.read(File.expand_path('../../../VERSION', __FILE__))
+    end
+  end
+end
 
 class Skylab::Myterm::ValidationError < RuntimeError ; end
 

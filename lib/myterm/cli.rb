@@ -1,15 +1,6 @@
-require "#{File.expand_path('../vendor/face/cli', __FILE__)}"
-require "#{File.dirname(__FILE__)}/api"
-require 'ruby-debug'
+require File.expand_path('../vendor/skylab/face/cli', __FILE__)
+require File.expand_path('../api', __FILE__)
 require 'open3'
-
-module Skylab; end
-
-module Skylab::Myterm
-  def self.version
-    File.read(File.expand_path('../../../VERSION', __FILE__))
-  end
-end
 
 module Skylab::Myterm::PathPrettifier
   HomeDirRe = /\A#{Regexp.escape(ENV['HOME'])}/
