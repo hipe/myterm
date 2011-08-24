@@ -4,7 +4,12 @@ require 'ruby-debug'
 require 'open3'
 
 module Skylab; end
-module Skylab::Myterm; end
+
+module Skylab::Myterm
+  def self.version
+    File.read(File.expand_path('../../../VERSION', __FILE__))
+  end
+end
 
 module Skylab::Myterm::PathPrettifier
   HomeDirRe = /\A#{Regexp.escape(ENV['HOME'])}/
@@ -22,13 +27,10 @@ class Skylab::Myterm::Cli < Skylab::Face::Cli
   Myterm = ::Skylab::Myterm # don't use fully qualified name internally
   include Myterm::PathPrettifier
 
-  version do
-    require "#{File.dirname(__FILE__)}/version"
-    Myterm::VERSION
-  end
+  version { Skylab::Myterm.version}
 
   o(:bounds) do |o|
-    syntax "#{path} [x y width height]"
+    syntax "#{invocation_string} [x y width height]"
     o.banner = "gets/sets the bounds of the terminal window\n#{usage_string}"
   end
 
@@ -44,7 +46,7 @@ class Skylab::Myterm::Cli < Skylab::Face::Cli
   end
 
   o(:'bg') do |o, req|
-    syntax "#{path} [opts] [<text> [<text> [...]]]"
+    syntax "#{invocation_string} [opts] [<text> [<text> [...]]]"
     o.banner = "Generate a background image with certain text for the terminal\n#{usage_string}"
     o.on('-e', '--exec <cmd ...>', 'Execute <cmd ...> in shell, also use it as text for background.') { }
     o.on('-o', '--opacity PERCENT', "Percent by which to make image background opaque",
