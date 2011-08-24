@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 
-ruby ./._repath.rb 1> .__tmp.sh
-source ./.__tmp.sh
+dir="$( cd "$( dirname "$0" )" && pwd )"
+tmp="$dir/.__tmp.sh"
+ruby "$dir/._repath.rb" 1> "$tmp"
+source "$tmp"
+rm "$tmp"
