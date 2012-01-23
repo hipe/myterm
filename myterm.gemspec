@@ -1,10 +1,10 @@
 # -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
-require "myterm/version"
+_version = File.read(File.expand_path('../VERSION', __FILE__))
 
 Gem::Specification.new do |s|
   s.name        = "myterm"
-  s.version     = Skylab::Myterm::VERSION
+  s.version     = _version
   s.authors     = ["Mark Meves"]
   s.email       = ["mark.meves@gmail.com"]
   s.homepage    = "http://botnoise.org"
@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
 
   s.add_dependency 'rb-appscript'
   s.add_dependency 'highline'
+  s.add_development_dependency 'rake'
   s.add_development_dependency "ruby-debug19"
 
   s.files         = `git ls-files`.split("\n")
@@ -23,3 +24,4 @@ Gem::Specification.new do |s|
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
 end
+
