@@ -14,9 +14,11 @@ Gem::Specification.new do |s|
 
   s.rubyforge_project = "myterm"
 
-  s.add_dependency 'rb-appscript'
   s.add_dependency 'highline'
+  s.add_dependency 'rb-appscript'
   s.add_dependency 'rmagick'
+
+  s.add_development_dependency 'rake'
   s.add_development_dependency "ruby-debug19"
 
   s.files         = `git ls-files`.split("\n")
@@ -24,3 +26,4 @@ Gem::Specification.new do |s|
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
 end
+
