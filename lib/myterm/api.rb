@@ -129,20 +129,19 @@ module Skylab::Myterm
     end
 
     def session
-      tty = `tty`.strip
       @session ||= begin
-        session = catch(:catch_two) do
-          app.terminals.get.each do |term|
-            sessions = term.sessions.get
-            sessions.each do |session|
-              if session.tty.get == tty
-                throw :catch_two, session
+        tty = `tty`.strip
+        t = s = 0
+        catch(:break) do
+          (1..app.terminals.count).each do |i|
+            (1..app.terminals[i].sessions.count).each do |j|
+              if tty == app.terminals[i].sessions[j].tty.get
+                throw(:break, SessionProxy.new(app, i, j))
               end
             end
           end
-        end
-        session or fail("couldn't ascertain current session!")
-        SessionProxy.new(session)
+          nil
+        end or fail("couldn't ascertain current session!")
       end
     end
   end
@@ -152,7 +151,7 @@ module Skylab::Myterm
       list.each do |property|
         lambda do |_property|
           define_method(_property) do
-            @resource.send(_property).get
+            resource.send(_property).get
           end
         end.call(property)
       end
@@ -162,7 +161,7 @@ module Skylab::Myterm
       list.each do |property|
         lambda do |_property|
           define_method("#{_property}=") do |val|
-            @resource.send(_property).set val
+            resource.send(_property).set val
           end
         end.call(property)
       end
@@ -180,15 +179,19 @@ module Skylab::Myterm
     delegated_attr_accessors :background_image_path
 
     def background_color
-      Color[@resource.background_color.get]
+      Color[resource.background_color.get]
     end
 
     def foreground_color
-      Color[@resource.foreground_color.get]
+      Color[resource.foreground_color.get]
     end
 
-    def initialize session
-      @resource = session
+    def initialize app, term_idx, session_idx
+      @app, @term_idx, @sessions_idx = [app, term_idx, session_idx]
+    end
+
+    def resource
+      @app.terminals[@term_idx].sessions[@sessions_idx]
     end
 
     delegated_attr_readers :tty
